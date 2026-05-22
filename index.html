@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GVU AI News Generator</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+
+<style>
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: #f3f5f7;
+  font-family: Arial;
+  text-align: center;
+}
+
+h1 {
+  color: #006163;
+}
+
+.container {
+  max-width: 1200px;
+  margin: auto;
+}
+
+input, textarea {
+  width: 90%;
+  padding: 14px;
+  margin: 10px 0;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+
+textarea {
+  height: 120px;
+  resize: vertical;
+}
+
+button {
+  padding: 12px 20px;
+  margin: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #006163;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #004d4d;
+}
+
+canvas {
+  display: block;
+  margin: 30px auto;
+  border: 1px solid #ccc;
+  background: white;
+}
+
+.status {
+  margin-top: 10px;
+  color: #006163;
+  font-weight: bold;
+}
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h1>GVU AI News Generator</h1>
+
+<input type="text" id="urlInput" placeholder="Paste news URL here">
+
+<button onclick="fetchArticle()">Fetch News</button>
+
+<div class="status" id="status"></div>
+
+<textarea id="headlineInput" placeholder="Headline"></textarea>
+
+<p><b>Paste image directly with CTRL + V</b></p>
+
+<button onclick="generateCard()">Generate News Card</button>
+<button onclick="downloadCard()">Download</button>
+
+<canvas id="canvas" width="1080" height="1350"></canvas>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+
+const headlineInput = document.getElementById('headlineInput');
+const statusDiv = document.getElementById('status');
+
+const backgroundImage = new Image();
+backgroundImage.src = 'BG.png';
+
+const logoImage = new Image();
+logoImage.src = 'GVU.png?v=' + new Date().getTime();
+
+let pastedImage = null;
+
+// ================= PASTE IMAGE =================
+
+document.addEventListener('paste', (event) => {
+
+  const items = event.clipboardData.items;
+
+  for (let item of items) {
+
+    if (item.type.indexOf('image') !== -1) {
+
+      const blob = item.getAsFile();
+
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+
+        pastedImage = new Image();
+
+        pastedImage.onload = function() {
+          statusDiv.innerText = 'Image pasted successfully';
+        };
+
+        pastedImage.src = e.target.result;
+      };
+
+      reader.readAsDataURL(blob);
+    }
+  }
+});
+
+// ================= FETCH ARTICLE =================
+
+async function fetchArticle() {
+
+  const url = document.getElementById('urlInput').value.trim();
+
+  if (!url) {
+    alert('Paste URL first');
+    return;
+  }
+
+  statusDiv.innerText = 'Fetching article...';
+
+  try {
+
+    // DEMO API
+    // Replace with your backend API
+
+    const response = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
+
+    const data = await response.json();
+
+    if (data.status !== 'success') {
+      throw new Error('Failed');
+    }
+
+    const article = data.data;
+
+    // Auto headline
+    headlineInput.value = article.title || '';
+
+    // Auto image
+    if (article.image && article.image.url) {
+
+      pastedImage = new Image();
+
+      pastedImage.crossOrigin = 'anonymous';
+
+      pastedImage.onload = function() {
+        statusDiv.innerText = 'Article fetched successfully';
+      };
+
+      pastedImage.src = article.image.url;
+    }
+
+  } catch (err) {
+
+    console.error(err);
+
+    statusDiv.innerText = 'Could not fetch article';
+  }
+}
+
+// ================= TEXT =================
+
+function drawWrappedText(text, x, y, maxWidth, size) {
+
+  const words = text.split(' ');
+
+  let line = [];
+  let lines = [];
+
+  ctx.font = `700 ${size}px Montserrat`;
+  ctx.fillStyle = '#006163';
+  ctx.textBaseline = 'top';
+
+  for (let word of words) {
+
+    const test = line.join(' ') + ' ' + word;
+
+    if (ctx.measureText(test).width > maxWidth && line.length) {
+      lines.push(line.join(' '));
+      line = [word];
+    } else {
+      line.push(word);
+    }
+  }
+
+  if (line.length) lines.push(line.join(' '));
+
+  for (let i = 0; i < lines.length; i++) {
+
+    const width = ctx.measureText(lines[i]).width;
+
+    ctx.fillText(
+      lines[i],
+      x - width / 2,
+      y + i * size * 1.2
+    );
+  }
+}
+
+// ================= GENERATE CARD =================
+
+function generateCard() {
+
+  const headline = headlineInput.value.trim();
+
+  if (!headline) {
+    alert('Enter headline');
+    return;
+  }
+
+  if (!pastedImage) {
+    alert('Paste image first');
+    return;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // BACKGROUND
+  ctx.drawImage(backgroundImage, 0, 0, 1080, 1350);
+
+  // IMAGE FIT
+
+  const maxW = 1030;
+  const maxH = 750;
+
+  const ratio = Math.min(
+    maxW / pastedImage.width,
+    maxH / pastedImage.height
+  );
+
+  const w = pastedImage.width * ratio;
+  const h = pastedImage.height * ratio;
+
+  const x = (1080 - w) / 2;
+  const y = 120 + ((maxH - h) / 2);
+
+  // DRAW IMAGE
+  ctx.drawImage(pastedImage, x, y, w, h);
+
+  // LOGO BACKGROUND
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(x + 15, y + 15, 140, 140);
+
+  // LOGO
+  ctx.drawImage(logoImage, x + 25, y + 25, 120, 120);
+
+  // HEADLINE
+  drawWrappedText(headline, 540, 930, 900, 60);
+
+  statusDiv.innerText = 'News card generated';
+}
+
+// ================= DOWNLOAD =================
+
+function downloadCard() {
+
+  const link = document.createElement('a');
+
+  link.download = 'GVU-News.png';
+
+  link.href = canvas.toDataURL('image/png');
+
+  link.click();
+}
+
+</script>
+
+</body>
+</html>
